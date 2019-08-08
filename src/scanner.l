@@ -706,6 +706,7 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 %x      ObjCMethod
 %x      ObjCReturnType
 %x      ObjCParams
+%x      ObjCParameter
 %x      ObjCParamType
 %x      ObjCProtocolList
 %x 	ObjCPropAttr
@@ -1120,22 +1121,27 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 <ObjCMethod>"("				{ // start of method's return type
   					  BEGIN( ObjCReturnType );
   					}
-<ObjCMethod>{ID}			{ // found method name
+<ObjCMethod>{ID}({B}*[^:^;^{]+)?	{ // found method name
   					  if (current->type.isEmpty())
 					  {
 					    current->type = "id";
 					  }
-					  current->name = yytext;
+                      QCString name = QCString(yytext);
+                      int s = name.find(" ");
+                      if (s != -1) {
+                          name = name.left(s);
+                      }
+                      current->name = name;
                                           if (insideCpp || insideObjC) 
                                           {
-                                            current->id = ClangParser::instance()->lookup(yyLineNr,yytext);
+                                            current->id = ClangParser::instance()->lookup(yyLineNr,name);
                                           }
   					}
 <ObjCMethod>":"{B}*			{ // start of parameter list
   					  current->name += ':';
   					  Argument *a = new Argument;
 					  current->argList->append(a);
-  					  BEGIN( ObjCParams );
+  					  BEGIN( ObjCParameter );
   					}
 <ObjCReturnType>[^)]*			{ // TODO: check if nested braches are possible.
   					  current->type = yytext;
@@ -1161,12 +1167,14 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
   					  Argument *a = new Argument;
   					  a->attrib=(QCString)"["+keyw+"]";
 					  current->argList->append(a);
+                      BEGIN( ObjCParameter );
   					}
-<ObjCParams>{ID}{BN}*			{ // name of parameter
+<ObjCParameter>{ID}{BN}*			{ // name of parameter
   					  lineCount();
   					  current->argList->getLast()->name=QCString(yytext).stripWhiteSpace();
+                      BEGIN( ObjCParams );
   					}
-<ObjCParams>","{BN}*"..."		{ // name of parameter
+<ObjCParameter>","{BN}*"..."		{ // name of parameter
   					  lineCount();
 					  // do we want the comma as part of the name?
   					  //current->name += ",";
@@ -1180,7 +1188,7 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 					  current->name += ':';
 					}
    */
-<ObjCParams>"("				{
+<ObjCParameter>"("				{
 				 	  roundCount=0;
 					  current->argList->getLast()->type.resize(0);
 					  BEGIN( ObjCParamType );
@@ -1192,7 +1200,7 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 <ObjCParamType>")"/{B}*			{
                                           if (roundCount<=0)
                                           {
-                                            BEGIN( ObjCParams );
+                                            BEGIN( ObjCParameter );
                                           }
                                           else
                                           {
@@ -1203,7 +1211,7 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 <ObjCParamType>[^()]*			{
         				  current->argList->getLast()->type+=QCString(yytext).stripWhiteSpace();
   					}
-<ObjCMethod,ObjCParams>";"		{ // end of method declaration
+<ObjCMethod,ObjCParams,ObjCParameter>";"		{ // end of method declaration
 					  if (current->argList->getLast() && current->argList->getLast()->type.isEmpty())
 					  {
 					    current->argList->getLast()->type="id";
@@ -1213,7 +1221,7 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
   					  unput(';');
   					  BEGIN( Function );
                                         }
-<ObjCMethod,ObjCParams>(";"{BN}+)?"{"	{ // start of a method body
+<ObjCMethod,ObjCParams,ObjCParameter>(";"{BN}+)?"{"	{ // start of a method body
   					  lineCount();
                                           //printf("Type=%s Name=%s args=%s\n",
 					  //    current->type.data(),current->name.data(),argListToString(current->argList).data()
