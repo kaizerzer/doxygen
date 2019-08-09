@@ -710,6 +710,8 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 %x      ObjCParamType
 %x      ObjCProtocolList
 %x 	ObjCPropAttr
+%x  ObjCPropertyType
+%x  ObjCPropertyName
 %x 	ObjCSkipStatement
 %x	QtPropType
 %x	QtPropName
@@ -1327,10 +1329,29 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 					  current->spec|=Entry::NonAtomic;
   					}
 <ObjCPropAttr>")"			{
-  					  BEGIN(FindMembers);
+  					  BEGIN(ObjCPropertyType);
   					}
+<ObjCPropertyType>{B}*{ID}("<"{ID}">")?({B}*'*'{B}*)? {
+    current->type = yytext;
+    current->type = current->type.stripWhiteSpace();
+    lineCount();
+    BEGIN( ObjCPropertyName );
+}
+<ObjCPropertyName>{ID} {
+    lineCount();
+    if (current->name.length() == 0) {
+        current->name = yytext;
+        current->id = ClangParser::instance()->lookup(yyLineNr,yytext);
+    }
+}
+<ObjCPropertyName>['('')'0-9'.'] {
+}
+<ObjCPropertyName>";" {
+    unput(';');
+    BEGIN( FindMembers );
+}
 <FindMembers>"@"{ID}			{
-  					  if (insideJava) // Java annotation
+   					  if (insideJava) // Java annotation
 					  {
 					    // skip annotation
 					  }
