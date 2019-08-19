@@ -7383,6 +7383,7 @@ g_lang2extMap[] =
   { "c",           "c",             SrcLangExt_Cpp      },
   { "c++",         "c",             SrcLangExt_Cpp      },
   { "slice",       "c",             SrcLangExt_Slice    },
+  { "actionscript", "c",            SrcLangExt_AS       },
   { "python",      "python",        SrcLangExt_Python   },
   { "fortran",     "fortran",       SrcLangExt_Fortran  },
   { "fortranfree", "fortranfree",   SrcLangExt_Fortran  },
@@ -7461,8 +7462,8 @@ void initDefaultExtensionMapping()
   updateLanguageMapping(".ddl",      "idl");
   updateLanguageMapping(".odl",      "idl");
   updateLanguageMapping(".java",     "java");
-  //updateLanguageMapping(".as",       "javascript"); // not officially supported
-  //updateLanguageMapping(".js",       "javascript"); // not officially supported
+  updateLanguageMapping(".as",       "actionscript"); // not officially supported
+  updateLanguageMapping(".js",       "javascript"); // not officially supported
   updateLanguageMapping(".cs",       "csharp");
   updateLanguageMapping(".d",        "d");
   updateLanguageMapping(".php",      "php");
@@ -8523,6 +8524,7 @@ QCString langToString(SrcLangExt lang)
     case SrcLangExt_Tcl:      return "Tcl";
     case SrcLangExt_Markdown: return "Markdown";
     case SrcLangExt_Slice:    return "Slice";
+      case SrcLangExt_AS: return "ActionScript";
   }
   return "Unknown";
 }

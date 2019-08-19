@@ -127,6 +127,7 @@ static bool             insidePHP   = FALSE;		//!< processing PHP code?
 static bool             insideObjC  = FALSE;            //!< processing Objective C code?
 static bool             insideCli   = FALSE;            //!< processing C++/CLI code?
 static bool             insideJS    = FALSE;            //!< processing JavaScript code?
+static bool             insideAS    = FALSE;            //!< processing ActionScript code?
 static bool             insideSlice = FALSE;            //!< processing Slice code?
 static bool             insideCpp   = TRUE;             //!< processing C/C++ code
 
@@ -389,6 +390,7 @@ static void setContext()
   insidePHP   = language==SrcLangExt_PHP;
   insideObjC  = language==SrcLangExt_ObjC;
   insideJS    = language==SrcLangExt_JS;
+  insideAS    = language==SrcLangExt_AS;
   insideSlice = language==SrcLangExt_Slice;
   insideCpp   = language==SrcLangExt_Cpp;
   if ( insidePHP )
@@ -583,6 +585,22 @@ void fixArgumentListForJavaScript(ArgumentList *al)
   }
 }
 
+void fixArgumentListForActionScript(ArgumentList *al)
+{
+    if (al==0) return;
+    ArgumentListIterator ali(*al);
+    Argument *a;
+    for (ali.toFirst();(a=ali.current());++ali)
+    {
+        if (!a->type.isEmpty() && a->name.isEmpty())
+        {
+            int s = a->type.find(":");
+            a->name=a->type.left(s).stripWhiteSpace();
+            a->type=a->type.right(a->type.length() - s - 1).stripWhiteSpace();
+        }
+    }
+}
+
 /* ----------------------------------------------------------------- */
 #undef	YY_INPUT
 #define	YY_INPUT(buf,result,max_size) result=yyread(buf,max_size);
@@ -628,7 +646,7 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 %option noyywrap
 
   /* language parsing states */
-
+%x  ActionScriptReturnType
 %x      AlignAs
 %x      AlignAsEnd
 %x	Define
@@ -1400,7 +1418,11 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
   					}
 <PackageName>"{"			{
 					  curlyCount=0;
-					  BEGIN( ReadNSBody );
+                      if (insideAS) {
+                          BEGIN(FindMembers);
+                      } else {
+                          BEGIN( ReadNSBody );
+                      }
   					}
 <FindMembers>{B}*"initonly"{BN}+	{
   					  current->type += " initonly ";
@@ -2417,7 +2439,7 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 					  {
 					    BEGIN(CppQuote);
 					  }
-					  else if ((insideIDL || insideJava || insideD) && yyleng==6 && qstrcmp(yytext,"import")==0)
+					  else if ((insideIDL || insideJava || insideD || insideAS) && yyleng==6 && qstrcmp(yytext,"import")==0)
 					  {
 					    if (insideIDL)
 					      BEGIN(NextSemi);
@@ -2428,7 +2450,7 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 					  {
 					    BEGIN(PHPUse);
 					  }
-					  else if (insideJava && qstrcmp(yytext,"package")==0)
+					  else if ((insideJava || insideAS) && qstrcmp(yytext,"package")==0)
 					  {
   					    lineCount();
 					    BEGIN(PackageName);
@@ -2447,11 +2469,11 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
                                             lastAlignAsContext = YY_START;
                                             BEGIN(AlignAs);
                                           }
-					  else if (insideJS && qstrcmp(yytext,"var")==0)
+					  else if ((insideJS || insideAS)  && qstrcmp(yytext,"var")==0)
 					  { // javascript variable
 					    current->type="var";
 					  }
-					  else if (insideJS && qstrcmp(yytext,"function")==0)
+					  else if ((insideJS || insideAS) && qstrcmp(yytext,"function")==0)
 					  { // javascript function
 					    current->type="function";
 					  }
@@ -2492,7 +2514,7 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 					    {
 					      addType( current ) ;
 					    }
-					    bool javaLike = insideJava || insideCS || insideD || insidePHP || insideJS;
+					    bool javaLike = insideJava || insideCS || insideD || insidePHP || insideJS || insideAS;
 					    if (javaLike && qstrcmp(yytext,"public")==0)
 					    {
 					      current->protection = Public;
@@ -4585,6 +4607,10 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 					  {
 					    fixArgumentListForJavaScript(current->argList);
 					  }
+                      if (insideAS) {
+                          fixArgumentListForActionScript(current->argList);
+                          current->args = argListToString(current->argList);
+                      }
                                           handleParametersCommentBlocks(current->argList);
 
 					  /* remember the current documentation block, since
@@ -4594,9 +4620,22 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 					   */
 					  docBackup = current->doc;
 					  briefBackup = current->brief;
-
-					  BEGIN( currentArgumentContext );
+                      
+                      if (insideAS) {
+                          BEGIN( ActionScriptReturnType );
+                      } else {
+                          BEGIN( currentArgumentContext );
+                      }
 					}
+<ActionScriptReturnType>":"{BN}*{ID}+ {
+    QCString type = QCString(yytext);
+    type = type.mid(1, type.length() - 1).stripWhiteSpace();
+    current->type = type;
+}
+<ActionScriptReturnType>"{" {
+    unput(*yytext);
+    BEGIN( currentArgumentContext );
+}
 	/* a special comment */
 <ReadFuncArgType,ReadTempArgs>("/*"[*!]|"//"[/!])("<"?)	{ 
                                           if (currentArgumentContext==DefineEnd)
@@ -5778,7 +5817,7 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
 					    roundCount=0;
 					    BEGIN(SkipUnionSwitch);
 					  }
-					  else if ((insideJava || insidePHP || insideJS || insideSlice) && (qstrcmp(yytext,"implements")==0 || qstrcmp(yytext,"extends")==0))
+					  else if ((insideJava || insidePHP || insideJS || insideSlice || insideAS) && (qstrcmp(yytext,"implements")==0 || qstrcmp(yytext,"extends")==0))
 					  {
   					    current->type.resize(0);
 					    baseProt=Public;
