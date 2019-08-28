@@ -1355,6 +1355,9 @@ OPERATOR  "operator"{B}*({ARITHOP}|{ASSIGNOP}|{LOGICOP}|{BITOP})
     lineCount();
     BEGIN( ObjCPropertyName );
 }
+<ObjCPropertyName>{B}*[*] {
+    current->type.append(" *");
+}
 <ObjCPropertyName>{ID} {
     lineCount();
     if (current->name.length() == 0) {
